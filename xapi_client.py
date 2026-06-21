@@ -11,20 +11,31 @@ SERVERS = {
     "demo": "wss://xapi.xtb.com:5124/websocket"
 }
 
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "Origin": "https://xstation5.xtb.com",
+}
+
 class XAPIClient:
     def __init__(self, login, password, account_type="real"):
         self.login = login
         self.password = password
         self.account_type = account_type
         self.ws = None
-        self.stream_ws = None
         self.session_id = None
         self.connected = False
 
     async def connect(self):
         ssl_ctx = ssl.create_default_context()
         url = SERVERS[self.account_type]
-        self.ws = await websockets.connect(url, ssl=ssl_ctx, ping_interval=30)
+        self.ws = await websockets.connect(
+            url,
+            ssl=ssl_ctx,
+            ping_interval=30,
+            ping_timeout=20,
+            additional_headers=HEADERS,
+            open_timeout=30
+        )
         await self._login()
         self.connected = True
         logger.info("✅ Connecté à XTB XAPI")
@@ -35,8 +46,8 @@ class XAPIClient:
             "arguments": {
                 "userId": self.login,
                 "password": self.password,
-                "appId": "trading_bot",
-                "appName": "BenjaminBot"
+                "appId": "xStation5",
+                "appName": "xStation"
             }
         }
         response = await self._send(cmd)
@@ -52,40 +63,31 @@ class XAPIClient:
         return json.loads(response)
 
     async def get_balance(self):
-        cmd = {"command": "getMarginLevel"}
-        return await self._send(cmd)
+        return await self._send({"command": "getMarginLevel"})
 
     async def get_symbol(self, symbol):
-        cmd = {
+        return await self._send({
             "command": "getSymbol",
             "arguments": {"symbol": symbol}
-        }
-        return await self._send(cmd)
+        })
 
     async def get_candles(self, symbol, period, count=100):
         import time
         start = int((time.time() - count * period * 60) * 1000)
-        cmd = {
+        return await self._send({
             "command": "getChartLastRequest",
             "arguments": {
-                "info": {
-                    "period": period,
-                    "start": start,
-                    "symbol": symbol
-                }
+                "info": {"period": period, "start": start, "symbol": symbol}
             }
-        }
-        return await self._send(cmd)
+        })
 
     async def open_trade(self, symbol, cmd_type, volume, sl=None, tp=None, comment="BotTrade"):
         symbol_info = await self.get_symbol(symbol)
         if symbol_info.get("status") is not True:
             raise Exception(f"Symbole introuvable: {symbol}")
-
         record = symbol_info["returnData"]
-        price = record["ask"] if cmd_type == 0 else record["bid"]  # 0=BUY, 1=SELL
-
-        trade_cmd = {
+        price = record["ask"] if cmd_type == 0 else record["bid"]
+        return await self._send({
             "command": "tradeTransaction",
             "arguments": {
                 "tradeTransInfo": {
@@ -95,33 +97,17 @@ class XAPIClient:
                     "price": price,
                     "sl": sl if sl else 0,
                     "tp": tp if tp else 0,
-                    "type": 0,  # OPEN
+                    "type": 0,
                     "comment": comment
                 }
             }
-        }
-        return await self._send(trade_cmd)
-
-    async def close_trade(self, order_id, symbol, cmd_type, volume, price):
-        close_cmd = {
-            "command": "tradeTransaction",
-            "arguments": {
-                "tradeTransInfo": {
-                    "cmd": cmd_type,
-                    "symbol": symbol,
-                    "volume": volume,
-                    "price": price,
-                    "type": 2,  # CLOSE
-                    "order": order_id,
-                    "comment": "CloseBot"
-                }
-            }
-        }
-        return await self._send(close_cmd)
+        })
 
     async def get_open_trades(self):
-        cmd = {"command": "getTrades", "arguments": {"openedOnly": True}}
-        return await self._send(cmd)
+        return await self._send({
+            "command": "getTrades",
+            "arguments": {"openedOnly": True}
+        })
 
     async def disconnect(self):
         if self.ws:
