@@ -6,8 +6,8 @@ import sys
 from xapi_client import XAPIClient
 from strategy import TradingStrategy
 from notifications import TelegramNotifier
+from market_hours import is_market_open, MARKET_HOURS
 
-# ─── Logging ────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -15,7 +15,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ─── Variables d'environnement ───────────────────────────────────────────────
 XTB_LOGIN    = os.environ.get("XTB_LOGIN")
 XTB_PASSWORD = os.environ.get("XTB_PASSWORD")
 XTB_TYPE     = os.environ.get("XTB_TYPE", "real")
@@ -30,6 +29,24 @@ def check_env():
         logger.error(f"❌ Variables manquantes: {', '.join(missing)}")
         sys.exit(1)
 
+def any_market_open():
+    """Retourne True si au moins un marché est ouvert."""
+    return any(is_market_open(s) for s in MARKET_HOURS)
+
+async def wait_for_market_open(notifier):
+    """Attend que les marchés rouvrent sans spammer Telegram."""
+    notified = False
+    while not any_market_open():
+        if not notified:
+            logger.info("🔒 Tous les marchés sont fermés — en attente...")
+            await notifier.send(
+                "🔒 *Marchés fermés*\n"
+                "Le bot attend la réouverture.\n"
+                "📅 EURUSD + XAUUSD rouvrent dimanche soir."
+            )
+            notified = True
+        await asyncio.sleep(300)  # Vérifie toutes les 5 minutes, silencieusement
+
 async def main():
     check_env()
 
@@ -40,6 +57,9 @@ async def main():
     retry_count = 0
 
     while True:
+        # ── Attendre l'ouverture des marchés avant toute connexion XTB ──
+        await wait_for_market_open(notifier)
+
         try:
             logger.info("🔌 Connexion à XTB...")
             await client.connect()
