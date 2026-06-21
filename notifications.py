@@ -1,36 +1,41 @@
 import aiohttp
 import logging
-import urllib.parse
 
 logger = logging.getLogger(__name__)
 
-class WhatsAppNotifier:
+class TelegramNotifier:
     """
-    Utilise CallMeBot — API WhatsApp 100% gratuite.
-    Activation requise UNE SEULE FOIS (voir README).
+    Notifications via Telegram Bot API.
     """
 
-    def __init__(self, phone_number, api_key=""):
-        # Numéro au format international sans + (ex: 237692497780)
-        self.phone = phone_number
-        self.api_key = api_key
-        self.base_url = "https://api.callmebot.com/whatsapp.php"
+    def __init__(self, token, chat_id):
+        self.token = token
+        self.chat_id = chat_id
+        self.base_url = f"https://api.telegram.org/bot{token}/sendMessage"
 
     async def send(self, message: str):
-        if not self.phone or not self.api_key:
-            logger.warning("WhatsApp non configuré — message ignoré")
+        if not self.token or not self.chat_id:
+            logger.warning("Telegram non configuré — message ignoré")
             logger.info(f"[NOTIF] {message}")
             return
 
-        encoded = urllib.parse.quote(message)
-        url = f"{self.base_url}?phone={self.phone}&text={encoded}&apikey={self.api_key}"
+        payload = {
+            "chat_id": self.chat_id,
+            "text": message,
+            "parse_mode": "Markdown"
+        }
 
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                async with session.post(
+                    self.base_url,
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=10)
+                ) as resp:
                     if resp.status == 200:
-                        logger.info("✅ Notification WhatsApp envoyée")
+                        logger.info("✅ Notification Telegram envoyée")
                     else:
-                        logger.warning(f"⚠️ WhatsApp status: {resp.status}")
+                        body = await resp.text()
+                        logger.warning(f"⚠️ Telegram status: {resp.status} — {body}")
         except Exception as e:
-            logger.error(f"Erreur notification WhatsApp: {e}")
+            logger.error(f"Erreur notification Telegram: {e}")

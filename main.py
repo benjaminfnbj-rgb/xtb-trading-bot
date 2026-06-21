@@ -5,24 +5,22 @@ import sys
 
 from xapi_client import XAPIClient
 from strategy import TradingStrategy
-from notifications import WhatsAppNotifier
+from notifications import TelegramNotifier
 
 # ─── Logging ────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
+    handlers=[logging.StreamHandler(sys.stdout)]
 )
 logger = logging.getLogger(__name__)
 
 # ─── Variables d'environnement ───────────────────────────────────────────────
 XTB_LOGIN    = os.environ.get("XTB_LOGIN")
 XTB_PASSWORD = os.environ.get("XTB_PASSWORD")
-XTB_TYPE     = os.environ.get("XTB_TYPE", "real")       # "real" ou "demo"
-WA_PHONE     = os.environ.get("WA_PHONE")               # ex: 237692497780
-WA_APIKEY    = os.environ.get("WA_APIKEY")              # clé CallMeBot
+XTB_TYPE     = os.environ.get("XTB_TYPE", "real")
+TG_TOKEN     = os.environ.get("TG_TOKEN")
+TG_CHAT_ID   = os.environ.get("TG_CHAT_ID")
 
 def check_env():
     missing = []
@@ -35,7 +33,7 @@ def check_env():
 async def main():
     check_env()
 
-    notifier = WhatsAppNotifier(WA_PHONE, WA_APIKEY)
+    notifier = TelegramNotifier(TG_TOKEN, TG_CHAT_ID)
     client   = XAPIClient(XTB_LOGIN, XTB_PASSWORD, XTB_TYPE)
     strategy = TradingStrategy(client, notifier)
 
@@ -50,7 +48,7 @@ async def main():
 
         except Exception as e:
             retry_count += 1
-            wait_time = min(30 * retry_count, 300)  # Max 5 minutes
+            wait_time = min(30 * retry_count, 300)
             logger.error(f"❌ Erreur critique (tentative {retry_count}): {e}")
 
             try:
