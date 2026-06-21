@@ -33,7 +33,7 @@ class XAPIClient:
             ssl=ssl_ctx,
             ping_interval=30,
             ping_timeout=20,
-            additional_headers=HEADERS,
+            extra_headers=HEADERS,
             open_timeout=30
         )
         await self._login()
